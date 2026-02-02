@@ -23,6 +23,7 @@
         .bill-item { display: flex; justify-content: space-between; align-items: center; padding: 10px; border-bottom: 1px solid #eee; }
         .bill-info { display: flex; flex-direction: column; }
         .bill-type-tag { font-size: 0.7em; text-transform: uppercase; color: #95a5a6; font-weight: bold; }
+        .summary-box { background: #f1f2f6; padding: 15px; border-radius: 12px; margin-top: 15px; text-align: center; }
         .forecast-row { display: flex; justify-content: space-between; padding: 10px; border-bottom: 1px solid #f1f2f6; font-size: 0.9em; }
         .neg { background: #fff5f5; color: var(--danger); font-weight: bold; }
         .scroll-area { max-height: 350px; overflow-y: auto; background: white; border-radius: 10px; }
@@ -33,7 +34,7 @@
 
 <div class="container">
     <h1>BudgetBud</h1>
-    <div id="status">Status: Waiting for Google Library...</div>
+    <div id="status">Status: Waiting for Google...</div>
 
     <div class="sync-bar">
         <button id="auth_btn" class="btn btn-sync" onclick="handleAuthClick()">Cloud Login</button>
@@ -63,7 +64,7 @@
             <select id="billFreq" class="input-group">
                 <option value="7">Weekly</option>
                 <option value="14">Fortnightly</option>
-                <option value="30">Monthly</option>
+                <option value="30" selected>Monthly</option>
                 <option value="90">Quarterly</option>
             </select>
         </div>
@@ -72,7 +73,9 @@
         <input type="date" id="billDate" class="input-group">
         
         <button onclick="addBill()" class="btn" style="background:var(--dark)">Add to Budget</button>
+        
         <div id="billListUI"></div>
+        <div id="summaryUI" class="summary-box" style="display:none;"></div>
     </div>
 
     <button onclick="calculateForecast()" class="btn btn-main">Run 90-Day Forecast</button>
@@ -89,10 +92,9 @@
     window.onload = () => {
         try {
             tokenClient = google.accounts.oauth2.initTokenClient({
-                client_id: CLIENT_ID,
-                scope: SCOPES,
-                callback: (tokenResponse) => {
-                    accessToken = tokenResponse.access_token;
+                client_id: CLIENT_ID, scope: SCOPES,
+                callback: (resp) => {
+                    accessToken = resp.access_token;
                     document.getElementById('auth_btn').innerText = "Logged In";
                     document.getElementById('sync_btn').style.display = "block";
                     document.getElementById('status').innerText = "Status: Cloud Connected";
@@ -100,7 +102,7 @@
                 },
             });
             document.getElementById('status').innerText = "Status: Local Mode (Ready)";
-        } catch (err) { console.error(err); }
+        } catch (e) { console.error(e); }
         loadLocal();
     };
 
@@ -127,7 +129,11 @@
 
     function renderBills() {
         const ui = document.getElementById('billListUI');
-        ui.innerHTML = bills.length ? '<h4 style="margin:10px 0 5px;">Current Expenses</h4>' : '';
+        const summary = document.getElementById('summaryUI');
+        ui.innerHTML = bills.length ? '<h4 style="margin:15px 0 5px;">Current Expenses</h4>' : '';
+        
+        let monthlyTotal = 0;
+
         bills.forEach((b, i) => {
             const div = document.createElement('div');
             div.className = 'bill-item';
@@ -138,7 +144,22 @@
                 </div>
                 <button onclick="deleteBill(${i})" class="btn btn-del">Remove</button>`;
             ui.appendChild(div);
+
+            // Calculate Monthly Overhead for recurring items
+            if (b.type === 'recurring') {
+                if (b.freq === 7) monthlyTotal += (b.amount * 4.33);
+                else if (b.freq === 14) monthlyTotal += (b.amount * 2.16);
+                else if (b.freq === 30) monthlyTotal += b.amount;
+                else if (b.freq === 90) monthlyTotal += (b.amount / 3);
+            }
         });
+
+        if (monthlyTotal > 0) {
+            summary.style.display = "block";
+            summary.innerHTML = `<strong>Total Monthly Bills: $${monthlyTotal.toFixed(2)}</strong>`;
+        } else {
+            summary.style.display = "none";
+        }
     }
 
     function calculateForecast() {
@@ -148,7 +169,6 @@
         const pDate = new Date(document.getElementById('nextPayDate').value);
         const results = document.getElementById('forecastResults');
         results.innerHTML = "";
-
         if (isNaN(pDate.getTime())) return alert("Set a Pay Date");
 
         let current = new Date();
@@ -156,25 +176,15 @@
 
         for (let i = 0; i < 90; i++) {
             let note = "";
-            const diffTime = current - pDate;
-            const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-            
-            if (diffDays >= 0 && diffDays % 14 === 0) {
-                bal += pay;
-                note = `<b style="color:var(--primary)">+[Pay]</b>`;
-            }
+            const diffDays = Math.floor((current - pDate) / (1000 * 60 * 60 * 24));
+            if (diffDays >= 0 && diffDays % 14 === 0) { bal += pay; note = `<b style="color:var(--primary)">+[Pay]</b>`; }
 
-            tempBills.forEach((b, idx) => {
+            tempBills.forEach(b => {
                 if (current.toDateString() === b.nextDate.toDateString()) {
                     bal -= b.amount;
                     note += ` <span>[${b.name}]</span>`;
-                    
-                    // If recurring, set next date. If once-off, push date to future so it doesn't hit again
-                    if (b.freq > 0) {
-                        b.nextDate.setDate(b.nextDate.getDate() + b.freq);
-                    } else {
-                        b.nextDate.setDate(b.nextDate.getDate() + 999); 
-                    }
+                    if (b.freq > 0) b.nextDate.setDate(b.nextDate.getDate() + b.freq);
+                    else b.nextDate.setDate(b.nextDate.getDate() + 999);
                 }
             });
 
@@ -186,7 +196,6 @@
         }
     }
 
-    /* PREVIOUS SYNC FUNCTIONS REMAIN THE SAME */
     function loadLocal() {
         document.getElementById('startBalance').value = localStorage.getItem('BudgetBud_startBal') || '';
         document.getElementById('payAmount').value = localStorage.getItem('BudgetBud_payAmt') || '';
@@ -201,6 +210,7 @@
     }
     function deleteBill(index) { bills.splice(index, 1); saveLocal(); renderBills(); }
     function handleAuthClick() { tokenClient.requestAccessToken({prompt: 'consent'}); }
+    
     async function syncToDrive() {
         if (!accessToken) return alert("Login First");
         const content = { bills, balance: document.getElementById('startBalance').value, pay: document.getElementById('payAmount').value, payDate: document.getElementById('nextPayDate').value };
@@ -219,8 +229,9 @@
             formData.append("file", new Blob([JSON.stringify(content)], { type: 'application/json' }));
             await fetch(url, { method: method, headers: { 'Authorization': `Bearer ${accessToken}` }, body: formData });
             document.getElementById('status').innerText = "Status: Saved to Cloud";
-        } catch (err) { console.error(err); }
+        } catch (e) { console.error(e); }
     }
+
     async function pullFromDrive() {
         try {
             const searchRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=name='budgetbud_data.json' and trashed=false&fields=files(id)`, { headers: { 'Authorization': `Bearer ${accessToken}` } });
@@ -235,7 +246,7 @@
                 saveLocal(); renderBills();
                 document.getElementById('status').innerText = "Status: Cloud Data Loaded";
             }
-        } catch (err) { console.error(err); }
+        } catch (e) { console.error(e); }
     }
 </script>
 </body>
