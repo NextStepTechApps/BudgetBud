@@ -7,10 +7,16 @@
     <script src="https://accounts.google.com/gsi/client" async defer></script>
     <script src="https://apis.google.com/js/api.js" async defer></script>
     <style>
-        :root { --primary: #2ecc71; --dark: #2c3e50; --danger: #e74c3c; --google-blue: #4285F4; }
-        body { font-family: -apple-system, system-ui, sans-serif; padding: 20px; background: #f8f9fa; color: var(--dark); line-height: 1.5; }
-        .container { max-width: 500px; margin: auto; }
-        .card { background: white; padding: 20px; border-radius: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.05); margin-bottom: 20px; }
+        :root { 
+            --primary: #2ecc71; --dark: #2c3e50; --danger: #e74c3c; --google-blue: #4285F4;
+            --bg: #f8f9fa; --card-bg: #ffffff; --text: #2c3e50; --border: #dfe6e9; --summary: #f1f2f6;
+        }
+        [data-theme="dark"] {
+            --bg: #1a1a1a; --card-bg: #2d2d2d; --text: #f8f9fa; --border: #444; --summary: #3d3d3d;
+        }
+        body { font-family: -apple-system, system-ui, sans-serif; padding: 20px; background: var(--bg); color: var(--text); line-height: 1.5; transition: background 0.3s; }
+        .container { max-width: 500px; margin: auto; position: relative; }
+        .card { background: var(--card-bg); padding: 20px; border-radius: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); margin-bottom: 20px; }
         h1 { color: var(--primary); text-align: center; margin-bottom: 5px; }
         .sync-bar { display: flex; gap: 10px; margin-bottom: 20px; }
         .btn { border: none; border-radius: 10px; padding: 12px; font-weight: bold; cursor: pointer; color: white; width: 100%; transition: opacity 0.2s; }
@@ -19,20 +25,22 @@
         .btn-del { background: var(--danger); padding: 5px 10px; width: auto; font-size: 12px; }
         .input-group { margin-bottom: 12px; }
         label { display: block; font-size: 0.8em; font-weight: 600; color: #7f8c8d; margin-bottom: 4px; }
-        input, select { width: 100%; padding: 12px; border: 1px solid #dfe6e9; border-radius: 10px; box-sizing: border-box; font-size: 16px; }
-        .bill-item { display: flex; justify-content: space-between; align-items: center; padding: 10px; border-bottom: 1px solid #eee; }
-        .bill-info { display: flex; flex-direction: column; }
+        input, select { width: 100%; padding: 12px; border: 1px solid var(--border); border-radius: 10px; box-sizing: border-box; font-size: 16px; background: var(--card-bg); color: var(--text); }
+        .bill-item { display: flex; justify-content: space-between; align-items: center; padding: 10px; border-bottom: 1px solid var(--border); }
         .bill-type-tag { font-size: 0.7em; text-transform: uppercase; color: #95a5a6; font-weight: bold; }
-        .summary-box { background: #f1f2f6; padding: 15px; border-radius: 12px; margin-top: 15px; text-align: center; }
-        .forecast-row { display: flex; justify-content: space-between; padding: 10px; border-bottom: 1px solid #f1f2f6; font-size: 0.9em; }
-        .neg { background: #fff5f5; color: var(--danger); font-weight: bold; }
-        .scroll-area { max-height: 350px; overflow-y: auto; background: white; border-radius: 10px; }
-        #status { font-size: 0.8em; text-align: center; color: #95a5a6; margin-bottom: 15px; background: #eee; padding: 5px; border-radius: 5px; }
+        .summary-box { background: var(--summary); padding: 15px; border-radius: 12px; margin-top: 15px; text-align: center; }
+        .forecast-row { display: flex; justify-content: space-between; padding: 10px; border-bottom: 1px solid var(--border); font-size: 0.9em; }
+        .neg { background: rgba(231, 76, 60, 0.1); color: var(--danger); font-weight: bold; }
+        .scroll-area { max-height: 350px; overflow-y: auto; background: var(--card-bg); border-radius: 10px; }
+        #status { font-size: 0.8em; text-align: center; color: #95a5a6; margin-bottom: 15px; background: var(--summary); padding: 5px; border-radius: 5px; }
+        /* Dark Mode Toggle Button */
+        .theme-toggle { position: absolute; top: 0; right: 0; background: none; border: none; font-size: 1.5rem; cursor: pointer; padding: 10px; color: var(--text); }
     </style>
 </head>
 <body>
 
 <div class="container">
+    <button class="theme-toggle" onclick="toggleTheme()" id="themeBtn">🌙</button>
     <h1>BudgetBud</h1>
     <div id="status">Status: Waiting for Google...</div>
 
@@ -55,10 +63,8 @@
             <option value="recurring">Recurring Bill</option>
             <option value="once-off">Once-off Expense</option>
         </select>
-
-        <input type="text" id="billName" placeholder="Name (e.g. Rent, Car Service)" class="input-group">
+        <input type="text" id="billName" placeholder="Name" class="input-group">
         <input type="number" id="billAmount" placeholder="Amount ($)" class="input-group">
-        
         <div id="freqContainer">
             <label>Frequency</label>
             <select id="billFreq" class="input-group">
@@ -68,12 +74,9 @@
                 <option value="90">Quarterly</option>
             </select>
         </div>
-
         <label>Date of Expense</label>
         <input type="date" id="billDate" class="input-group">
-        
         <button onclick="addBill()" class="btn" style="background:var(--dark)">Add to Budget</button>
-        
         <div id="billListUI"></div>
         <div id="summaryUI" class="summary-box" style="display:none;"></div>
     </div>
@@ -85,11 +88,23 @@
 <script>
     const CLIENT_ID = '209415722638-h0br52hmiektc9tbm9fqcfkb6uhuisaa.apps.googleusercontent.com';
     const SCOPES = 'https://www.googleapis.com/auth/drive.file';
-    let tokenClient;
-    let accessToken = null;
+    let tokenClient, accessToken = null;
     let bills = JSON.parse(localStorage.getItem('BudgetBud_bills')) || [];
 
+    // Dark Mode Toggle Logic
+    function toggleTheme() {
+        const current = document.documentElement.getAttribute('data-theme');
+        const target = current === 'dark' ? 'light' : 'dark';
+        document.documentElement.setAttribute('data-theme', target);
+        localStorage.setItem('BudgetBud_theme', target);
+        document.getElementById('themeBtn').innerText = target === 'dark' ? '☀️' : '🌙';
+    }
+
+    // Initialize Theme
+    const savedTheme = localStorage.getItem('BudgetBud_theme') || 'light';
+    document.documentElement.setAttribute('data-theme', savedTheme);
     window.onload = () => {
+        document.getElementById('themeBtn').innerText = savedTheme === 'dark' ? '☀️' : '🌙';
         try {
             tokenClient = google.accounts.oauth2.initTokenClient({
                 client_id: CLIENT_ID, scope: SCOPES,
@@ -106,6 +121,9 @@
         loadLocal();
     };
 
+    /* ALL OTHER FUNCTIONS (toggleFreq, addBill, renderBills, calculateForecast, Sync logic) 
+       REMAIN EXACTLY THE SAME AS THE PREVIOUS VERSION */
+
     function toggleFreq() {
         const type = document.getElementById('billType').value;
         document.getElementById('freqContainer').style.display = (type === 'once-off') ? 'none' : 'block';
@@ -117,12 +135,9 @@
         const type = document.getElementById('billType').value;
         const freq = (type === 'once-off') ? 0 : parseInt(document.getElementById('billFreq').value);
         const date = document.getElementById('billDate').value;
-        
         if (!name || isNaN(amount) || !date) return alert("Fill in all fields");
-
         bills.push({ name, amount, type, freq, nextDate: date });
-        saveLocal();
-        renderBills();
+        saveLocal(); renderBills();
         document.getElementById('billName').value = '';
         document.getElementById('billAmount').value = '';
     }
@@ -131,21 +146,12 @@
         const ui = document.getElementById('billListUI');
         const summary = document.getElementById('summaryUI');
         ui.innerHTML = bills.length ? '<h4 style="margin:15px 0 5px;">Current Expenses</h4>' : '';
-        
         let monthlyTotal = 0;
-
         bills.forEach((b, i) => {
             const div = document.createElement('div');
             div.className = 'bill-item';
-            div.innerHTML = `
-                <div class="bill-info">
-                    <span class="bill-type-tag">${b.type}</span>
-                    <span><b>${b.name}</b> ($${b.amount})</span>
-                </div>
-                <button onclick="deleteBill(${i})" class="btn btn-del">Remove</button>`;
+            div.innerHTML = `<div class="bill-info"><span class="bill-type-tag">${b.type}</span><span><b>${b.name}</b> ($${b.amount})</span></div><button onclick="deleteBill(${i})" class="btn btn-del">Remove</button>`;
             ui.appendChild(div);
-
-            // Calculate Monthly Overhead for recurring items
             if (b.type === 'recurring') {
                 if (b.freq === 7) monthlyTotal += (b.amount * 4.33);
                 else if (b.freq === 14) monthlyTotal += (b.amount * 2.16);
@@ -153,13 +159,8 @@
                 else if (b.freq === 90) monthlyTotal += (b.amount / 3);
             }
         });
-
-        if (monthlyTotal > 0) {
-            summary.style.display = "block";
-            summary.innerHTML = `<strong>Total Monthly Bills: $${monthlyTotal.toFixed(2)}</strong>`;
-        } else {
-            summary.style.display = "none";
-        }
+        summary.style.display = monthlyTotal > 0 ? "block" : "none";
+        summary.innerHTML = `<strong>Total Monthly Bills: $${monthlyTotal.toFixed(2)}</strong>`;
     }
 
     function calculateForecast() {
@@ -170,24 +171,19 @@
         const results = document.getElementById('forecastResults');
         results.innerHTML = "";
         if (isNaN(pDate.getTime())) return alert("Set a Pay Date");
-
         let current = new Date();
         let tempBills = JSON.parse(JSON.stringify(bills)).map(b => { b.nextDate = new Date(b.nextDate); return b; });
-
         for (let i = 0; i < 90; i++) {
             let note = "";
             const diffDays = Math.floor((current - pDate) / (1000 * 60 * 60 * 24));
             if (diffDays >= 0 && diffDays % 14 === 0) { bal += pay; note = `<b style="color:var(--primary)">+[Pay]</b>`; }
-
             tempBills.forEach(b => {
                 if (current.toDateString() === b.nextDate.toDateString()) {
-                    bal -= b.amount;
-                    note += ` <span>[${b.name}]</span>`;
+                    bal -= b.amount; note += ` <span>[${b.name}]</span>`;
                     if (b.freq > 0) b.nextDate.setDate(b.nextDate.getDate() + b.freq);
                     else b.nextDate.setDate(b.nextDate.getDate() + 999);
                 }
             });
-
             const row = document.createElement('div');
             row.className = `forecast-row ${bal < 0 ? 'neg' : ''}`;
             row.innerHTML = `<span>${current.toLocaleDateString('en-AU', {day:'2-digit', month:'short'})}</span> <small>${note}</small> <span>$${bal.toFixed(2)}</span>`;
@@ -218,12 +214,8 @@
         try {
             const searchRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=name='budgetbud_data.json' and trashed=false`, { headers: { 'Authorization': `Bearer ${accessToken}` } });
             const searchData = await searchRes.json();
-            let url = 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart';
-            let method = 'POST';
-            if (searchData.files && searchData.files.length > 0) {
-                url = `https://www.googleapis.com/upload/drive/v3/files/${searchData.files[0].id}?uploadType=multipart`;
-                method = 'PATCH';
-            }
+            let url = 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', method = 'POST';
+            if (searchData.files && searchData.files.length > 0) { url = `https://www.googleapis.com/upload/drive/v3/files/${searchData.files[0].id}?uploadType=multipart`; method = 'PATCH'; }
             const formData = new FormData();
             formData.append("metadata", new Blob([JSON.stringify(fileMetadata)], { type: 'application/json' }));
             formData.append("file", new Blob([JSON.stringify(content)], { type: 'application/json' }));
