@@ -24,6 +24,7 @@
         .btn-main { background: var(--primary); margin-top: 10px; width: 100%; }
         .btn-del { background: var(--danger); padding: 5px 8px; width: auto; font-size: 11px; margin-left: 5px; }
         .btn-pay { background: var(--primary); padding: 5px 8px; width: auto; font-size: 11px; }
+        .btn-export { background: var(--dark); margin-top: 10px; width: 100%; }
         .input-group { margin-bottom: 12px; }
         label { display: block; font-size: 0.8em; font-weight: 600; color: #7f8c8d; margin-bottom: 4px; }
         input, select { width: 100%; padding: 12px; border: 1px solid var(--border); border-radius: 10px; box-sizing: border-box; font-size: 16px; background: var(--card-bg); color: var(--text); }
@@ -100,8 +101,10 @@
             <div class="search-box">
                 <input type="text" id="historySearch" placeholder="Search past payments..." oninput="renderHistory()">
             </div>
+            <div id="historyStats" style="font-size: 0.8em; margin-bottom: 10px; color: var(--primary); font-weight: bold;"></div>
             <div id="historyListUI" class="scroll-area"></div>
-            <button onclick="clearHistory()" class="btn btn-del" style="margin-top:10px; width:100%;">Clear History</button>
+            <button onclick="exportHistory()" class="btn btn-export">Export to CSV</button>
+            <button onclick="clearHistory()" class="btn btn-del" style="margin-top:10px; width:100%;">Clear All History</button>
         </div>
     </div>
 
@@ -171,7 +174,7 @@
 
     function markAsPaid(index) {
         const item = bills[index];
-        const paidItem = { ...item, paidDate: new Date().toLocaleDateString() };
+        const paidItem = { ...item, paidDate: new Date().toLocaleDateString('en-AU') };
         historyLog.unshift(paidItem);
         if (item.type === 'once-off') {
             bills.splice(index, 1);
@@ -199,9 +202,13 @@
 
     function renderHistory() {
         const ui = document.getElementById('historyListUI');
+        const stats = document.getElementById('historyStats');
         const searchTerm = document.getElementById('historySearch').value.toLowerCase();
         const filtered = historyLog.filter(h => h.name.toLowerCase().includes(searchTerm));
         
+        const totalSpent = filtered.reduce((sum, item) => sum + item.amount, 0);
+        stats.innerHTML = filtered.length ? `Showing ${filtered.length} items | Total: $${totalSpent.toFixed(2)}` : "";
+
         ui.innerHTML = filtered.length ? '' : '<p style="text-align:center; padding:20px;">No matching records found.</p>';
         filtered.forEach(h => {
             const div = document.createElement('div');
@@ -209,6 +216,23 @@
             div.innerHTML = `<div class="bill-info"><span class="bill-type-tag">Paid ${h.paidDate}</span><span>${h.name} ($${h.amount})</span></div>`;
             ui.appendChild(div);
         });
+    }
+
+    function exportHistory() {
+        if (!historyLog.length) return alert("No history to export.");
+        let csv = "Name,Amount,Type,Paid Date\n";
+        historyLog.forEach(h => {
+            csv += `"${h.name}",${h.amount},"${h.type}","${h.paidDate}"\n`;
+        });
+        const blob = new Blob([csv], { type: 'text/csv' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.setAttribute('hidden', '');
+        a.setAttribute('href', url);
+        a.setAttribute('download', `BudgetBud_History_${new Date().toLocaleDateString('en-AU')}.csv`);
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
     }
 
     function calculateForecast() {
@@ -258,7 +282,7 @@
         localStorage.setItem('BudgetBud_payDate', document.getElementById('nextPayDate').value);
     }
     function deleteBill(index) { bills.splice(index, 1); saveLocal(); renderBills(); }
-    function clearHistory() { if(confirm("Clear history?")) { historyLog = []; saveLocal(); renderHistory(); } }
+    function clearHistory() { if(confirm("Clear all history? This cannot be undone.")) { historyLog = []; saveLocal(); renderHistory(); } }
     function handleAuthClick() { tokenClient.requestAccessToken({prompt: 'consent'}); }
 
     async function syncToDrive() {
