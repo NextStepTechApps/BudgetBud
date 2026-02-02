@@ -14,27 +14,35 @@
         [data-theme="dark"] {
             --bg: #1a1a1a; --card-bg: #2d2d2d; --text: #f8f9fa; --border: #444; --summary: #3d3d3d;
         }
-        body { font-family: -apple-system, system-ui, sans-serif; padding: 20px; background: var(--bg); color: var(--text); line-height: 1.5; transition: background 0.3s; }
+        body { font-family: -apple-system, system-ui, sans-serif; padding: 10px 10px 80px 10px; background: var(--bg); color: var(--text); line-height: 1.5; transition: background 0.3s; }
         .container { max-width: 500px; margin: auto; position: relative; }
         .card { background: var(--card-bg); padding: 20px; border-radius: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); margin-bottom: 20px; }
         h1 { color: var(--primary); text-align: center; margin-bottom: 5px; }
         .sync-bar { display: flex; gap: 10px; margin-bottom: 20px; }
-        .btn { border: none; border-radius: 10px; padding: 12px; font-weight: bold; cursor: pointer; color: white; width: 100%; transition: opacity 0.2s; }
-        .btn-sync { background: var(--google-blue); display: block !important; }
-        .btn-main { background: var(--primary); margin-top: 10px; }
-        .btn-del { background: var(--danger); padding: 5px 10px; width: auto; font-size: 12px; }
+        .btn { border: none; border-radius: 10px; padding: 12px; font-weight: bold; cursor: pointer; color: white; width: 100%; transition: opacity 0.2s; font-size: 14px; }
+        .btn-sync { background: var(--google-blue); }
+        .btn-main { background: var(--primary); margin-top: 10px; width: 100%; }
+        .btn-del { background: var(--danger); padding: 5px 8px; width: auto; font-size: 11px; margin-left: 5px; }
+        .btn-pay { background: var(--primary); padding: 5px 8px; width: auto; font-size: 11px; }
         .input-group { margin-bottom: 12px; }
         label { display: block; font-size: 0.8em; font-weight: 600; color: #7f8c8d; margin-bottom: 4px; }
         input, select { width: 100%; padding: 12px; border: 1px solid var(--border); border-radius: 10px; box-sizing: border-box; font-size: 16px; background: var(--card-bg); color: var(--text); }
-        .bill-item { display: flex; justify-content: space-between; align-items: center; padding: 10px; border-bottom: 1px solid var(--border); }
+        .bill-item { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--border); }
+        .bill-info { display: flex; flex-direction: column; flex-grow: 1; }
         .bill-type-tag { font-size: 0.7em; text-transform: uppercase; color: #95a5a6; font-weight: bold; }
-        .summary-box { background: var(--summary); padding: 15px; border-radius: 12px; margin-top: 15px; text-align: center; }
         .forecast-row { display: flex; justify-content: space-between; padding: 10px; border-bottom: 1px solid var(--border); font-size: 0.9em; }
         .neg { background: rgba(231, 76, 60, 0.1); color: var(--danger); font-weight: bold; }
-        .scroll-area { max-height: 350px; overflow-y: auto; background: var(--card-bg); border-radius: 10px; }
-        #status { font-size: 0.8em; text-align: center; color: #95a5a6; margin-bottom: 15px; background: var(--summary); padding: 5px; border-radius: 5px; }
-        /* Dark Mode Toggle Button */
-        .theme-toggle { position: absolute; top: 0; right: 0; background: none; border: none; font-size: 1.5rem; cursor: pointer; padding: 10px; color: var(--text); }
+        .scroll-area { max-height: 400px; overflow-y: auto; background: var(--card-bg); border-radius: 10px; }
+        #status { font-size: 0.7em; text-align: center; color: #95a5a6; margin-bottom: 15px; background: var(--summary); padding: 5px; border-radius: 5px; }
+        .theme-toggle { position: absolute; top: 0; right: 0; background: none; border: none; font-size: 1.2rem; cursor: pointer; padding: 10px; color: var(--text); }
+        .tab-bar { position: fixed; bottom: 0; left: 0; right: 0; background: var(--card-bg); display: flex; justify-content: space-around; padding: 10px; border-top: 1px solid var(--border); box-shadow: 0 -2px 10px rgba(0,0,0,0.05); }
+        .tab-btn { background: none; border: none; color: #95a5a6; font-size: 0.8em; font-weight: bold; cursor: pointer; display: flex; flex-direction: column; align-items: center; }
+        .tab-btn.active { color: var(--primary); }
+        .page { display: none; }
+        .page.active { display: block; }
+        .week-block { border-left: 4px solid var(--primary); padding-left: 10px; margin-bottom: 15px; }
+        .week-title { font-weight: bold; color: var(--primary); font-size: 0.9em; margin-bottom: 5px; }
+        .search-box { margin-bottom: 15px; }
     </style>
 </head>
 <body>
@@ -44,45 +52,64 @@
     <h1>BudgetBud</h1>
     <div id="status">Status: Waiting for Google...</div>
 
-    <div class="sync-bar">
-        <button id="auth_btn" class="btn btn-sync" onclick="handleAuthClick()">Cloud Login</button>
-        <button id="sync_btn" class="btn btn-sync" onclick="syncToDrive()" style="display:none; background:#34a853;">Save to Drive</button>
-    </div>
-
-    <div class="card">
-        <h2>Setup</h2>
-        <div class="input-group"><label>Bank Balance ($)</label><input type="number" id="startBalance" step="0.01"></div>
-        <div class="input-group"><label>Net Pay ($)</label><input type="number" id="payAmount"></div>
-        <div class="input-group"><label>Next Pay Date</label><input type="date" id="nextPayDate"></div>
-    </div>
-
-    <div class="card">
-        <h3>Add Expense</h3>
-        <label>Expense Type</label>
-        <select id="billType" class="input-group" onchange="toggleFreq()">
-            <option value="recurring">Recurring Bill</option>
-            <option value="once-off">Once-off Expense</option>
-        </select>
-        <input type="text" id="billName" placeholder="Name" class="input-group">
-        <input type="number" id="billAmount" placeholder="Amount ($)" class="input-group">
-        <div id="freqContainer">
-            <label>Frequency</label>
-            <select id="billFreq" class="input-group">
-                <option value="7">Weekly</option>
-                <option value="14">Fortnightly</option>
-                <option value="30" selected>Monthly</option>
-                <option value="90">Quarterly</option>
-            </select>
+    <div id="dashboard" class="page active">
+        <div class="sync-bar">
+            <button id="auth_btn" class="btn btn-sync" onclick="handleAuthClick()">Cloud Login</button>
+            <button id="sync_btn" class="btn btn-sync" onclick="syncToDrive()" style="display:none; background:#34a853;">Save to Drive</button>
         </div>
-        <label>Date of Expense</label>
-        <input type="date" id="billDate" class="input-group">
-        <button onclick="addBill()" class="btn" style="background:var(--dark)">Add to Budget</button>
-        <div id="billListUI"></div>
-        <div id="summaryUI" class="summary-box" style="display:none;"></div>
+
+        <div class="card">
+            <h2>Setup</h2>
+            <div class="input-group"><label>Bank Balance ($)</label><input type="number" id="startBalance" step="0.01"></div>
+            <div class="input-group"><label>Net Pay ($)</label><input type="number" id="payAmount"></div>
+            <div class="input-group"><label>Next Pay Date</label><input type="date" id="nextPayDate"></div>
+        </div>
+
+        <div class="card">
+            <h3>Add Expense</h3>
+            <select id="billType" class="input-group" onchange="toggleFreq()">
+                <option value="recurring">Recurring Bill</option>
+                <option value="once-off">Once-off Expense</option>
+            </select>
+            <input type="text" id="billName" placeholder="Name" class="input-group">
+            <input type="number" id="billAmount" placeholder="Amount ($)" class="input-group">
+            <div id="freqContainer">
+                <select id="billFreq" class="input-group">
+                    <option value="7">Weekly</option>
+                    <option value="14">Fortnightly</option>
+                    <option value="30" selected>Monthly</option>
+                    <option value="90">Quarterly</option>
+                </select>
+            </div>
+            <input type="date" id="billDate" class="input-group">
+            <button onclick="addBill()" class="btn btn-main">Add to Budget</button>
+            <div id="billListUI"></div>
+        </div>
     </div>
 
-    <button onclick="calculateForecast()" class="btn btn-main">Run 90-Day Forecast</button>
-    <div id="forecastResults" class="scroll-area card" style="margin-top:20px; padding:0;"></div>
+    <div id="weekly" class="page">
+        <div class="card">
+            <h3>Weekly Breakdown</h3>
+            <div id="weeklyResults" class="scroll-area"></div>
+        </div>
+    </div>
+
+    <div id="history" class="page">
+        <div class="card">
+            <h3>Payment History</h3>
+            <div class="search-box">
+                <input type="text" id="historySearch" placeholder="Search past payments..." oninput="renderHistory()">
+            </div>
+            <div id="historyListUI" class="scroll-area"></div>
+            <button onclick="clearHistory()" class="btn btn-del" style="margin-top:10px; width:100%;">Clear History</button>
+        </div>
+    </div>
+
+    <nav class="tab-bar">
+        <button class="tab-btn active" onclick="showPage('dashboard', this)"><span>🏠</span>Home</button>
+        <button class="tab-btn" onclick="showPage('weekly', this); calculateForecast();"><span>📅</span>Weekly</button>
+        <button class="tab-btn" onclick="showPage('history', this)"><span>📜</span>History</button>
+    </nav>
 </div>
 
 <script>
@@ -90,19 +117,25 @@
     const SCOPES = 'https://www.googleapis.com/auth/drive.file';
     let tokenClient, accessToken = null;
     let bills = JSON.parse(localStorage.getItem('BudgetBud_bills')) || [];
+    let historyLog = JSON.parse(localStorage.getItem('BudgetBud_history')) || [];
 
-    // Dark Mode Toggle Logic
+    function showPage(pageId, btn) {
+        document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.getElementById(pageId).classList.add('active');
+        btn.classList.add('active');
+    }
+
     function toggleTheme() {
-        const current = document.documentElement.getAttribute('data-theme');
-        const target = current === 'dark' ? 'light' : 'dark';
+        const target = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
         document.documentElement.setAttribute('data-theme', target);
         localStorage.setItem('BudgetBud_theme', target);
         document.getElementById('themeBtn').innerText = target === 'dark' ? '☀️' : '🌙';
     }
 
-    // Initialize Theme
     const savedTheme = localStorage.getItem('BudgetBud_theme') || 'light';
     document.documentElement.setAttribute('data-theme', savedTheme);
+
     window.onload = () => {
         document.getElementById('themeBtn').innerText = savedTheme === 'dark' ? '☀️' : '🌙';
         try {
@@ -116,51 +149,66 @@
                     pullFromDrive();
                 },
             });
-            document.getElementById('status').innerText = "Status: Local Mode (Ready)";
         } catch (e) { console.error(e); }
         loadLocal();
     };
 
-    /* ALL OTHER FUNCTIONS (toggleFreq, addBill, renderBills, calculateForecast, Sync logic) 
-       REMAIN EXACTLY THE SAME AS THE PREVIOUS VERSION */
-
     function toggleFreq() {
-        const type = document.getElementById('billType').value;
-        document.getElementById('freqContainer').style.display = (type === 'once-off') ? 'none' : 'block';
+        document.getElementById('freqContainer').style.display = document.getElementById('billType').value === 'once-off' ? 'none' : 'block';
     }
 
     function addBill() {
         const name = document.getElementById('billName').value;
         const amount = parseFloat(document.getElementById('billAmount').value);
         const type = document.getElementById('billType').value;
-        const freq = (type === 'once-off') ? 0 : parseInt(document.getElementById('billFreq').value);
+        const freq = type === 'once-off' ? 0 : parseInt(document.getElementById('billFreq').value);
         const date = document.getElementById('billDate').value;
-        if (!name || isNaN(amount) || !date) return alert("Fill in all fields");
+        if (!name || isNaN(amount) || !date) return alert("Missing info");
         bills.push({ name, amount, type, freq, nextDate: date });
         saveLocal(); renderBills();
-        document.getElementById('billName').value = '';
-        document.getElementById('billAmount').value = '';
+        document.getElementById('billName').value = ''; document.getElementById('billAmount').value = '';
+    }
+
+    function markAsPaid(index) {
+        const item = bills[index];
+        const paidItem = { ...item, paidDate: new Date().toLocaleDateString() };
+        historyLog.unshift(paidItem);
+        if (item.type === 'once-off') {
+            bills.splice(index, 1);
+        } else {
+            let d = new Date(item.nextDate);
+            d.setDate(d.getDate() + item.freq);
+            bills[index].nextDate = d.toISOString().split('T')[0];
+        }
+        saveLocal(); renderBills(); renderHistory();
     }
 
     function renderBills() {
         const ui = document.getElementById('billListUI');
-        const summary = document.getElementById('summaryUI');
-        ui.innerHTML = bills.length ? '<h4 style="margin:15px 0 5px;">Current Expenses</h4>' : '';
-        let monthlyTotal = 0;
+        ui.innerHTML = bills.length ? '<h4 style="margin:15px 0 5px;">Upcoming Expenses</h4>' : '';
         bills.forEach((b, i) => {
             const div = document.createElement('div');
             div.className = 'bill-item';
-            div.innerHTML = `<div class="bill-info"><span class="bill-type-tag">${b.type}</span><span><b>${b.name}</b> ($${b.amount})</span></div><button onclick="deleteBill(${i})" class="btn btn-del">Remove</button>`;
+            div.innerHTML = `
+                <div class="bill-info"><span class="bill-type-tag">${b.type}</span><span><b>${b.name}</b> ($${b.amount})</span></div>
+                <button onclick="markAsPaid(${i})" class="btn btn-pay">Paid</button>
+                <button onclick="deleteBill(${i})" class="btn btn-del">X</button>`;
             ui.appendChild(div);
-            if (b.type === 'recurring') {
-                if (b.freq === 7) monthlyTotal += (b.amount * 4.33);
-                else if (b.freq === 14) monthlyTotal += (b.amount * 2.16);
-                else if (b.freq === 30) monthlyTotal += b.amount;
-                else if (b.freq === 90) monthlyTotal += (b.amount / 3);
-            }
         });
-        summary.style.display = monthlyTotal > 0 ? "block" : "none";
-        summary.innerHTML = `<strong>Total Monthly Bills: $${monthlyTotal.toFixed(2)}</strong>`;
+    }
+
+    function renderHistory() {
+        const ui = document.getElementById('historyListUI');
+        const searchTerm = document.getElementById('historySearch').value.toLowerCase();
+        const filtered = historyLog.filter(h => h.name.toLowerCase().includes(searchTerm));
+        
+        ui.innerHTML = filtered.length ? '' : '<p style="text-align:center; padding:20px;">No matching records found.</p>';
+        filtered.forEach(h => {
+            const div = document.createElement('div');
+            div.className = 'bill-item';
+            div.innerHTML = `<div class="bill-info"><span class="bill-type-tag">Paid ${h.paidDate}</span><span>${h.name} ($${h.amount})</span></div>`;
+            ui.appendChild(div);
+        });
     }
 
     function calculateForecast() {
@@ -168,27 +216,31 @@
         let bal = parseFloat(document.getElementById('startBalance').value) || 0;
         const pay = parseFloat(document.getElementById('payAmount').value) || 0;
         const pDate = new Date(document.getElementById('nextPayDate').value);
-        const results = document.getElementById('forecastResults');
+        const results = document.getElementById('weeklyResults');
         results.innerHTML = "";
-        if (isNaN(pDate.getTime())) return alert("Set a Pay Date");
+        if (isNaN(pDate.getTime())) return;
         let current = new Date();
         let tempBills = JSON.parse(JSON.stringify(bills)).map(b => { b.nextDate = new Date(b.nextDate); return b; });
-        for (let i = 0; i < 90; i++) {
-            let note = "";
-            const diffDays = Math.floor((current - pDate) / (1000 * 60 * 60 * 24));
-            if (diffDays >= 0 && diffDays % 14 === 0) { bal += pay; note = `<b style="color:var(--primary)">+[Pay]</b>`; }
-            tempBills.forEach(b => {
-                if (current.toDateString() === b.nextDate.toDateString()) {
-                    bal -= b.amount; note += ` <span>[${b.name}]</span>`;
-                    if (b.freq > 0) b.nextDate.setDate(b.nextDate.getDate() + b.freq);
-                    else b.nextDate.setDate(b.nextDate.getDate() + 999);
+        for (let w = 0; w < 12; w++) {
+            let weekHTML = `<div class="week-block"><div class="week-title">Week ${w+1}</div>`;
+            for (let d = 0; d < 7; d++) {
+                let note = "";
+                const diffDays = Math.floor((current - pDate) / (1000 * 60 * 60 * 24));
+                if (diffDays >= 0 && diffDays % 14 === 0) { bal += pay; note = `<b>+[Pay]</b>`; }
+                tempBills.forEach(b => {
+                    if (current.toDateString() === b.nextDate.toDateString()) {
+                        bal -= b.amount; note += ` [${b.name}]`;
+                        if (b.freq > 0) b.nextDate.setDate(b.nextDate.getDate() + b.freq);
+                        else b.nextDate.setDate(b.nextDate.getDate() + 999);
+                    }
+                });
+                if (note) {
+                    weekHTML += `<div class="forecast-row"><span>${current.toLocaleDateString('en-AU', {day:'2-digit', month:'short'})}</span> <small>${note}</small> <span>$${bal.toFixed(0)}</span></div>`;
                 }
-            });
-            const row = document.createElement('div');
-            row.className = `forecast-row ${bal < 0 ? 'neg' : ''}`;
-            row.innerHTML = `<span>${current.toLocaleDateString('en-AU', {day:'2-digit', month:'short'})}</span> <small>${note}</small> <span>$${bal.toFixed(2)}</span>`;
-            results.appendChild(row);
-            current.setDate(current.getDate() + 1);
+                current.setDate(current.getDate() + 1);
+            }
+            weekHTML += `<div style="text-align:right; font-size:0.8em; padding:5px;">End Bal: $${bal.toFixed(0)}</div></div>`;
+            results.innerHTML += weekHTML;
         }
     }
 
@@ -196,28 +248,29 @@
         document.getElementById('startBalance').value = localStorage.getItem('BudgetBud_startBal') || '';
         document.getElementById('payAmount').value = localStorage.getItem('BudgetBud_payAmt') || '';
         document.getElementById('nextPayDate').value = localStorage.getItem('BudgetBud_payDate') || '';
-        renderBills();
+        renderBills(); renderHistory();
     }
     function saveLocal() {
         localStorage.setItem('BudgetBud_bills', JSON.stringify(bills));
+        localStorage.setItem('BudgetBud_history', JSON.stringify(historyLog));
         localStorage.setItem('BudgetBud_startBal', document.getElementById('startBalance').value);
         localStorage.setItem('BudgetBud_payAmt', document.getElementById('payAmount').value);
         localStorage.setItem('BudgetBud_payDate', document.getElementById('nextPayDate').value);
     }
     function deleteBill(index) { bills.splice(index, 1); saveLocal(); renderBills(); }
+    function clearHistory() { if(confirm("Clear history?")) { historyLog = []; saveLocal(); renderHistory(); } }
     function handleAuthClick() { tokenClient.requestAccessToken({prompt: 'consent'}); }
-    
+
     async function syncToDrive() {
-        if (!accessToken) return alert("Login First");
-        const content = { bills, balance: document.getElementById('startBalance').value, pay: document.getElementById('payAmount').value, payDate: document.getElementById('nextPayDate').value };
-        const fileMetadata = { name: 'budgetbud_data.json', mimeType: 'application/json' };
+        if (!accessToken) return;
+        const content = { bills, historyLog, balance: document.getElementById('startBalance').value, pay: document.getElementById('payAmount').value, payDate: document.getElementById('nextPayDate').value };
         try {
             const searchRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=name='budgetbud_data.json' and trashed=false`, { headers: { 'Authorization': `Bearer ${accessToken}` } });
             const searchData = await searchRes.json();
             let url = 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', method = 'POST';
             if (searchData.files && searchData.files.length > 0) { url = `https://www.googleapis.com/upload/drive/v3/files/${searchData.files[0].id}?uploadType=multipart`; method = 'PATCH'; }
             const formData = new FormData();
-            formData.append("metadata", new Blob([JSON.stringify(fileMetadata)], { type: 'application/json' }));
+            formData.append("metadata", new Blob([JSON.stringify({ name: 'budgetbud_data.json', mimeType: 'application/json' })], { type: 'application/json' }));
             formData.append("file", new Blob([JSON.stringify(content)], { type: 'application/json' }));
             await fetch(url, { method: method, headers: { 'Authorization': `Bearer ${accessToken}` }, body: formData });
             document.getElementById('status').innerText = "Status: Saved to Cloud";
@@ -232,10 +285,11 @@
                 const fileRes = await fetch(`https://www.googleapis.com/drive/v3/files/${searchData.files[0].id}?alt=media`, { headers: { 'Authorization': `Bearer ${accessToken}` } });
                 const cloudData = await fileRes.json();
                 bills = cloudData.bills || [];
+                historyLog = cloudData.historyLog || [];
                 document.getElementById('startBalance').value = cloudData.balance || '';
                 document.getElementById('payAmount').value = cloudData.pay || '';
                 document.getElementById('nextPayDate').value = cloudData.payDate || '';
-                saveLocal(); renderBills();
+                saveLocal(); renderBills(); renderHistory();
                 document.getElementById('status').innerText = "Status: Cloud Data Loaded";
             }
         } catch (e) { console.error(e); }
