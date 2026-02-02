@@ -6,9 +6,10 @@
     <title>BudgetBud | Cloud Sync</title>
     <script src="https://accounts.google.com/gsi/client" async defer></script>
     <script src="https://apis.google.com/js/api.js" async defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         :root { 
-            --primary: #2ecc71; --dark: #2c3e50; --danger: #e74c3c; --google-blue: #4285F4;
+            --primary: #2ecc71; --dark: #2c3e50; --danger: #e74c3c; --google-blue: #4285F4; --warning: #f1c40f;
             --bg: #f8f9fa; --card-bg: #ffffff; --text: #2c3e50; --border: #dfe6e9; --summary: #f1f2f6;
         }
         [data-theme="dark"] {
@@ -24,7 +25,6 @@
         .btn-main { background: var(--primary); margin-top: 10px; width: 100%; }
         .btn-del { background: var(--danger); padding: 5px 8px; width: auto; font-size: 11px; margin-left: 5px; }
         .btn-pay { background: var(--primary); padding: 5px 8px; width: auto; font-size: 11px; }
-        .btn-export { background: var(--dark); margin-top: 10px; width: 100%; }
         .input-group { margin-bottom: 12px; }
         label { display: block; font-size: 0.8em; font-weight: 600; color: #7f8c8d; margin-bottom: 4px; }
         input, select { width: 100%; padding: 12px; border: 1px solid var(--border); border-radius: 10px; box-sizing: border-box; font-size: 16px; background: var(--card-bg); color: var(--text); }
@@ -37,13 +37,13 @@
         #status { font-size: 0.7em; text-align: center; color: #95a5a6; margin-bottom: 15px; background: var(--summary); padding: 5px; border-radius: 5px; }
         .theme-toggle { position: absolute; top: 0; right: 0; background: none; border: none; font-size: 1.2rem; cursor: pointer; padding: 10px; color: var(--text); }
         .tab-bar { position: fixed; bottom: 0; left: 0; right: 0; background: var(--card-bg); display: flex; justify-content: space-around; padding: 10px; border-top: 1px solid var(--border); box-shadow: 0 -2px 10px rgba(0,0,0,0.05); }
-        .tab-btn { background: none; border: none; color: #95a5a6; font-size: 0.8em; font-weight: bold; cursor: pointer; display: flex; flex-direction: column; align-items: center; }
+        .tab-btn { background: none; border: none; color: #95a5a6; font-size: 0.7em; font-weight: bold; cursor: pointer; display: flex; flex-direction: column; align-items: center; }
         .tab-btn.active { color: var(--primary); }
         .page { display: none; }
         .page.active { display: block; }
+        .health-badge { display: inline-block; padding: 4px 12px; border-radius: 20px; color: white; font-weight: bold; font-size: 0.8em; margin-bottom: 10px; }
         .week-block { border-left: 4px solid var(--primary); padding-left: 10px; margin-bottom: 15px; }
         .week-title { font-weight: bold; color: var(--primary); font-size: 0.9em; margin-bottom: 5px; }
-        .search-box { margin-bottom: 15px; }
     </style>
 </head>
 <body>
@@ -58,14 +58,18 @@
             <button id="auth_btn" class="btn btn-sync" onclick="handleAuthClick()">Cloud Login</button>
             <button id="sync_btn" class="btn btn-sync" onclick="syncToDrive()" style="display:none; background:#34a853;">Save to Drive</button>
         </div>
+        
+        <div class="card" id="healthCard" style="text-align: center; display:none;">
+            <div id="healthScore" class="health-badge"></div>
+            <div id="healthText" style="font-size: 0.85em; opacity: 0.8;"></div>
+        </div>
 
         <div class="card">
             <h2>Setup</h2>
-            <div class="input-group"><label>Bank Balance ($)</label><input type="number" id="startBalance" step="0.01"></div>
-            <div class="input-group"><label>Net Pay ($)</label><input type="number" id="payAmount"></div>
+            <div class="input-group"><label>Bank Balance ($)</label><input type="number" id="startBalance" step="0.01" onchange="renderBills()"></div>
+            <div class="input-group"><label>Net Pay ($)</label><input type="number" id="payAmount" onchange="renderBills()"></div>
             <div class="input-group"><label>Next Pay Date</label><input type="date" id="nextPayDate"></div>
         </div>
-
         <div class="card">
             <h3>Add Expense</h3>
             <select id="billType" class="input-group" onchange="toggleFreq()">
@@ -74,17 +78,17 @@
             </select>
             <input type="text" id="billName" placeholder="Name" class="input-group">
             <input type="number" id="billAmount" placeholder="Amount ($)" class="input-group">
-            <div id="freqContainer">
-                <select id="billFreq" class="input-group">
-                    <option value="7">Weekly</option>
-                    <option value="14">Fortnightly</option>
-                    <option value="30" selected>Monthly</option>
-                    <option value="90">Quarterly</option>
-                </select>
-            </div>
+            <div id="freqContainer"><select id="billFreq" class="input-group"><option value="7">Weekly</option><option value="14">Fortnightly</option><option value="30" selected>Monthly</option><option value="90">Quarterly</option></select></div>
             <input type="date" id="billDate" class="input-group">
             <button onclick="addBill()" class="btn btn-main">Add to Budget</button>
             <div id="billListUI"></div>
+        </div>
+    </div>
+
+    <div id="graph" class="page">
+        <div class="card">
+            <h3>Balance Trend (90 Days)</h3>
+            <canvas id="budgetChart"></canvas>
         </div>
     </div>
 
@@ -98,18 +102,17 @@
     <div id="history" class="page">
         <div class="card">
             <h3>Payment History</h3>
-            <div class="search-box">
-                <input type="text" id="historySearch" placeholder="Search past payments..." oninput="renderHistory()">
-            </div>
+            <input type="text" id="historySearch" placeholder="Search..." oninput="renderHistory()" class="input-group">
             <div id="historyStats" style="font-size: 0.8em; margin-bottom: 10px; color: var(--primary); font-weight: bold;"></div>
             <div id="historyListUI" class="scroll-area"></div>
-            <button onclick="exportHistory()" class="btn btn-export">Export to CSV</button>
-            <button onclick="clearHistory()" class="btn btn-del" style="margin-top:10px; width:100%;">Clear All History</button>
+            <button onclick="exportHistory()" class="btn btn-main" style="background:var(--dark)">Export CSV</button>
+            <button onclick="clearHistory()" class="btn btn-del" style="margin-top:10px; width:100%;">Clear All</button>
         </div>
     </div>
 
     <nav class="tab-bar">
         <button class="tab-btn active" onclick="showPage('dashboard', this)"><span>🏠</span>Home</button>
+        <button class="tab-btn" onclick="showPage('graph', this); updateChart();"><span>📈</span>Graph</button>
         <button class="tab-btn" onclick="showPage('weekly', this); calculateForecast();"><span>📅</span>Weekly</button>
         <button class="tab-btn" onclick="showPage('history', this)"><span>📜</span>History</button>
     </nav>
@@ -118,7 +121,7 @@
 <script>
     const CLIENT_ID = '209415722638-h0br52hmiektc9tbm9fqcfkb6uhuisaa.apps.googleusercontent.com';
     const SCOPES = 'https://www.googleapis.com/auth/drive.file';
-    let tokenClient, accessToken = null;
+    let tokenClient, accessToken = null, myChart = null;
     let bills = JSON.parse(localStorage.getItem('BudgetBud_bills')) || [];
     let historyLog = JSON.parse(localStorage.getItem('BudgetBud_history')) || [];
 
@@ -134,6 +137,7 @@
         document.documentElement.setAttribute('data-theme', target);
         localStorage.setItem('BudgetBud_theme', target);
         document.getElementById('themeBtn').innerText = target === 'dark' ? '☀️' : '🌙';
+        if(myChart) updateChart();
     }
 
     const savedTheme = localStorage.getItem('BudgetBud_theme') || 'light';
@@ -156,118 +160,109 @@
         loadLocal();
     };
 
-    function toggleFreq() {
-        document.getElementById('freqContainer').style.display = document.getElementById('billType').value === 'once-off' ? 'none' : 'block';
+    function updateHealthScore(monthlyTotal) {
+        const payAmount = parseFloat(document.getElementById('payAmount').value) || 0;
+        const healthCard = document.getElementById('healthCard');
+        const healthScore = document.getElementById('healthScore');
+        const healthText = document.getElementById('healthText');
+
+        if (payAmount <= 0) { healthCard.style.display = "none"; return; }
+        healthCard.style.display = "block";
+
+        const monthlyIncome = payAmount * 2.16; // Assumes fortnightly pay. Adjust to *4.33 if weekly.
+        const ratio = (monthlyTotal / monthlyIncome) * 100;
+
+        let grade = "F", color = "#e74c3c", tip = "Bills are consuming your income.";
+        if (ratio < 30) { grade = "Score: A"; color = "#2ecc71"; tip = "Excellent overhead!"; }
+        else if (ratio < 50) { grade = "Score: B"; color = "#3498db"; tip = "Solid budget balance."; }
+        else if (ratio < 70) { grade = "Score: C"; color = "#f1c40f"; tip = "Tight overhead, watch spending."; }
+        else if (ratio < 90) { grade = "Score: D"; color = "#e67e22"; tip = "High bills relative to pay."; }
+
+        healthScore.innerText = grade;
+        healthScore.style.backgroundColor = color;
+        healthText.innerText = `${ratio.toFixed(0)}% of income goes to recurring bills. ${tip}`;
     }
 
+    function renderBills() {
+        const ui = document.getElementById('billListUI');
+        ui.innerHTML = bills.length ? '<h4 style="margin:15px 0 5px;">Upcoming</h4>' : '';
+        let monthlyTotal = 0;
+        bills.forEach((b, i) => {
+            const div = document.createElement('div'); div.className = 'bill-item';
+            div.innerHTML = `<div class="bill-info"><span class="bill-type-tag">${b.type}</span><span><b>${b.name}</b> ($${b.amount})</span></div><button onclick="markAsPaid(${i})" class="btn btn-pay">Paid</button><button onclick="deleteBill(${i})" class="btn btn-del">X</button>`;
+            ui.appendChild(div);
+            if (b.type === 'recurring') {
+                if (b.freq === 7) monthlyTotal += (b.amount * 4.33);
+                else if (b.freq === 14) monthlyTotal += (b.amount * 2.16);
+                else if (b.freq === 30) monthlyTotal += b.amount;
+                else if (b.freq === 90) monthlyTotal += (b.amount / 3);
+            }
+        });
+        updateHealthScore(monthlyTotal);
+    }
+
+    function updateChart() {
+        const ctx = document.getElementById('budgetChart').getContext('2d');
+        let bal = parseFloat(document.getElementById('startBalance').value) || 0;
+        const pay = parseFloat(document.getElementById('payAmount').value) || 0;
+        const pDate = new Date(document.getElementById('nextPayDate').value);
+        if (isNaN(pDate.getTime())) return;
+        let labels = [], data = [], current = new Date();
+        let tempBills = JSON.parse(JSON.stringify(bills)).map(b => { b.nextDate = new Date(b.nextDate); return b; });
+        for (let i = 0; i < 90; i++) {
+            const diffDays = Math.floor((current - pDate) / (1000 * 60 * 60 * 24));
+            if (diffDays >= 0 && diffDays % 14 === 0) bal += pay;
+            tempBills.forEach(b => { if (current.toDateString() === b.nextDate.toDateString()) { bal -= b.amount; if (b.freq > 0) b.nextDate.setDate(b.nextDate.getDate() + b.freq); else b.nextDate.setDate(b.nextDate.getDate() + 999); } });
+            labels.push(current.toLocaleDateString('en-AU', {day:'2-digit', month:'short'})); data.push(bal); current.setDate(current.getDate() + 1);
+        }
+        if (myChart) myChart.destroy();
+        const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+        myChart = new Chart(ctx, {
+            type: 'line',
+            data: { labels: labels, datasets: [{ label: 'Balance', data: data, borderColor: '#2ecc71', pointRadius: 0, fill: false }, { label: 'Zero', data: new Array(90).fill(0), borderColor: '#e74c3c', borderDash: [5, 5], pointRadius: 0 }] },
+            options: { responsive: true, maintainAspectRatio: false, scales: { y: { grid: { color: isDark ? '#444' : '#eee' } }, x: { grid: { display: false } } }, plugins: { legend: { display: false } } }
+        });
+    }
+
+    /* PREVIOUS CORE LOGIC FUNCTIONS */
+    function toggleFreq() { document.getElementById('freqContainer').style.display = document.getElementById('billType').value === 'once-off' ? 'none' : 'block'; }
     function addBill() {
-        const name = document.getElementById('billName').value;
-        const amount = parseFloat(document.getElementById('billAmount').value);
-        const type = document.getElementById('billType').value;
-        const freq = type === 'once-off' ? 0 : parseInt(document.getElementById('billFreq').value);
-        const date = document.getElementById('billDate').value;
+        const name = document.getElementById('billName').value, amount = parseFloat(document.getElementById('billAmount').value);
+        const type = document.getElementById('billType').value, freq = type === 'once-off' ? 0 : parseInt(document.getElementById('billFreq').value), date = document.getElementById('billDate').value;
         if (!name || isNaN(amount) || !date) return alert("Missing info");
         bills.push({ name, amount, type, freq, nextDate: date });
         saveLocal(); renderBills();
         document.getElementById('billName').value = ''; document.getElementById('billAmount').value = '';
     }
-
     function markAsPaid(index) {
-        const item = bills[index];
-        const paidItem = { ...item, paidDate: new Date().toLocaleDateString('en-AU') };
-        historyLog.unshift(paidItem);
-        if (item.type === 'once-off') {
-            bills.splice(index, 1);
-        } else {
-            let d = new Date(item.nextDate);
-            d.setDate(d.getDate() + item.freq);
-            bills[index].nextDate = d.toISOString().split('T')[0];
-        }
+        const item = bills[index]; historyLog.unshift({ ...item, paidDate: new Date().toLocaleDateString('en-AU') });
+        if (item.type === 'once-off') bills.splice(index, 1);
+        else { let d = new Date(item.nextDate); d.setDate(d.getDate() + item.freq); bills[index].nextDate = d.toISOString().split('T')[0]; }
         saveLocal(); renderBills(); renderHistory();
     }
-
-    function renderBills() {
-        const ui = document.getElementById('billListUI');
-        ui.innerHTML = bills.length ? '<h4 style="margin:15px 0 5px;">Upcoming Expenses</h4>' : '';
-        bills.forEach((b, i) => {
-            const div = document.createElement('div');
-            div.className = 'bill-item';
-            div.innerHTML = `
-                <div class="bill-info"><span class="bill-type-tag">${b.type}</span><span><b>${b.name}</b> ($${b.amount})</span></div>
-                <button onclick="markAsPaid(${i})" class="btn btn-pay">Paid</button>
-                <button onclick="deleteBill(${i})" class="btn btn-del">X</button>`;
-            ui.appendChild(div);
-        });
-    }
-
     function renderHistory() {
-        const ui = document.getElementById('historyListUI');
-        const stats = document.getElementById('historyStats');
-        const searchTerm = document.getElementById('historySearch').value.toLowerCase();
-        const filtered = historyLog.filter(h => h.name.toLowerCase().includes(searchTerm));
-        
-        const totalSpent = filtered.reduce((sum, item) => sum + item.amount, 0);
-        stats.innerHTML = filtered.length ? `Showing ${filtered.length} items | Total: $${totalSpent.toFixed(2)}` : "";
-
-        ui.innerHTML = filtered.length ? '' : '<p style="text-align:center; padding:20px;">No matching records found.</p>';
-        filtered.forEach(h => {
-            const div = document.createElement('div');
-            div.className = 'bill-item';
-            div.innerHTML = `<div class="bill-info"><span class="bill-type-tag">Paid ${h.paidDate}</span><span>${h.name} ($${h.amount})</span></div>`;
-            ui.appendChild(div);
-        });
+        const ui = document.getElementById('historyListUI'), stats = document.getElementById('historyStats'), s = document.getElementById('historySearch').value.toLowerCase();
+        const f = historyLog.filter(h => h.name.toLowerCase().includes(s));
+        stats.innerHTML = f.length ? `Total: $${f.reduce((sum, x) => sum + x.amount, 0).toFixed(2)}` : "";
+        ui.innerHTML = f.length ? '' : '<p style="text-align:center;">No records.</p>';
+        f.forEach(h => { const div = document.createElement('div'); div.className = 'bill-item'; div.innerHTML = `<div class="bill-info"><span class="bill-type-tag">Paid ${h.paidDate}</span><span>${h.name} ($${h.amount})</span></div>`; ui.appendChild(div); });
     }
-
-    function exportHistory() {
-        if (!historyLog.length) return alert("No history to export.");
-        let csv = "Name,Amount,Type,Paid Date\n";
-        historyLog.forEach(h => {
-            csv += `"${h.name}",${h.amount},"${h.type}","${h.paidDate}"\n`;
-        });
-        const blob = new Blob([csv], { type: 'text/csv' });
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.setAttribute('hidden', '');
-        a.setAttribute('href', url);
-        a.setAttribute('download', `BudgetBud_History_${new Date().toLocaleDateString('en-AU')}.csv`);
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-    }
-
     function calculateForecast() {
-        saveLocal();
-        let bal = parseFloat(document.getElementById('startBalance').value) || 0;
-        const pay = parseFloat(document.getElementById('payAmount').value) || 0;
-        const pDate = new Date(document.getElementById('nextPayDate').value);
-        const results = document.getElementById('weeklyResults');
-        results.innerHTML = "";
-        if (isNaN(pDate.getTime())) return;
-        let current = new Date();
-        let tempBills = JSON.parse(JSON.stringify(bills)).map(b => { b.nextDate = new Date(b.nextDate); return b; });
+        saveLocal(); let bal = parseFloat(document.getElementById('startBalance').value) || 0, pay = parseFloat(document.getElementById('payAmount').value) || 0, pDate = new Date(document.getElementById('nextPayDate').value), res = document.getElementById('weeklyResults');
+        res.innerHTML = ""; if (isNaN(pDate.getTime())) return;
+        let curr = new Date(), temp = JSON.parse(JSON.stringify(bills)).map(b => { b.nextDate = new Date(b.nextDate); return b; });
         for (let w = 0; w < 12; w++) {
             let weekHTML = `<div class="week-block"><div class="week-title">Week ${w+1}</div>`;
             for (let d = 0; d < 7; d++) {
-                let note = "";
-                const diffDays = Math.floor((current - pDate) / (1000 * 60 * 60 * 24));
-                if (diffDays >= 0 && diffDays % 14 === 0) { bal += pay; note = `<b>+[Pay]</b>`; }
-                tempBills.forEach(b => {
-                    if (current.toDateString() === b.nextDate.toDateString()) {
-                        bal -= b.amount; note += ` [${b.name}]`;
-                        if (b.freq > 0) b.nextDate.setDate(b.nextDate.getDate() + b.freq);
-                        else b.nextDate.setDate(b.nextDate.getDate() + 999);
-                    }
-                });
-                if (note) {
-                    weekHTML += `<div class="forecast-row"><span>${current.toLocaleDateString('en-AU', {day:'2-digit', month:'short'})}</span> <small>${note}</small> <span>$${bal.toFixed(0)}</span></div>`;
-                }
-                current.setDate(current.getDate() + 1);
+                let n = ""; const diff = Math.floor((curr - pDate) / (1000 * 60 * 60 * 24));
+                if (diff >= 0 && diff % 14 === 0) { bal += pay; n = `<b>+[Pay]</b>`; }
+                temp.forEach(b => { if (curr.toDateString() === b.nextDate.toDateString()) { bal -= b.amount; n += ` [${b.name}]`; if (b.freq > 0) b.nextDate.setDate(b.nextDate.getDate() + b.freq); else b.nextDate.setDate(b.nextDate.getDate() + 999); } });
+                if (n) weekHTML += `<div class="forecast-row"><span>${curr.toLocaleDateString('en-AU', {day:'2-digit', month:'short'})}</span> <small>${n}</small> <span>$${bal.toFixed(0)}</span></div>`;
+                curr.setDate(curr.getDate() + 1);
             }
-            weekHTML += `<div style="text-align:right; font-size:0.8em; padding:5px;">End Bal: $${bal.toFixed(0)}</div></div>`;
-            results.innerHTML += weekHTML;
+            res.innerHTML += weekHTML + `<div style="text-align:right; font-size:0.8em; padding:5px;">End: $${bal.toFixed(0)}</div></div>`;
         }
     }
-
     function loadLocal() {
         document.getElementById('startBalance').value = localStorage.getItem('BudgetBud_startBal') || '';
         document.getElementById('payAmount').value = localStorage.getItem('BudgetBud_payAmt') || '';
@@ -275,16 +270,17 @@
         renderBills(); renderHistory();
     }
     function saveLocal() {
-        localStorage.setItem('BudgetBud_bills', JSON.stringify(bills));
-        localStorage.setItem('BudgetBud_history', JSON.stringify(historyLog));
-        localStorage.setItem('BudgetBud_startBal', document.getElementById('startBalance').value);
-        localStorage.setItem('BudgetBud_payAmt', document.getElementById('payAmount').value);
-        localStorage.setItem('BudgetBud_payDate', document.getElementById('nextPayDate').value);
+        localStorage.setItem('BudgetBud_bills', JSON.stringify(bills)); localStorage.setItem('BudgetBud_history', JSON.stringify(historyLog));
+        localStorage.setItem('BudgetBud_startBal', document.getElementById('startBalance').value); localStorage.setItem('BudgetBud_payAmt', document.getElementById('payAmount').value); localStorage.setItem('BudgetBud_payDate', document.getElementById('nextPayDate').value);
     }
     function deleteBill(index) { bills.splice(index, 1); saveLocal(); renderBills(); }
-    function clearHistory() { if(confirm("Clear all history? This cannot be undone.")) { historyLog = []; saveLocal(); renderHistory(); } }
+    function clearHistory() { if(confirm("Clear history?")) { historyLog = []; saveLocal(); renderHistory(); } }
+    function exportHistory() {
+        let csv = "Name,Amount,Type,Paid Date\n"; historyLog.forEach(h => { csv += `"${h.name}",${h.amount},"${h.type}","${h.paidDate}"\n`; });
+        const blob = new Blob([csv], { type: 'text/csv' }), url = window.URL.createObjectURL(blob), a = document.createElement('a');
+        a.href = url; a.download = `History_${new Date().toLocaleDateString('en-AU')}.csv`; a.click();
+    }
     function handleAuthClick() { tokenClient.requestAccessToken({prompt: 'consent'}); }
-
     async function syncToDrive() {
         if (!accessToken) return;
         const content = { bills, historyLog, balance: document.getElementById('startBalance').value, pay: document.getElementById('payAmount').value, payDate: document.getElementById('nextPayDate').value };
@@ -300,7 +296,6 @@
             document.getElementById('status').innerText = "Status: Saved to Cloud";
         } catch (e) { console.error(e); }
     }
-
     async function pullFromDrive() {
         try {
             const searchRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=name='budgetbud_data.json' and trashed=false&fields=files(id)`, { headers: { 'Authorization': `Bearer ${accessToken}` } });
@@ -308,8 +303,7 @@
             if (searchData.files && searchData.files.length > 0) {
                 const fileRes = await fetch(`https://www.googleapis.com/drive/v3/files/${searchData.files[0].id}?alt=media`, { headers: { 'Authorization': `Bearer ${accessToken}` } });
                 const cloudData = await fileRes.json();
-                bills = cloudData.bills || [];
-                historyLog = cloudData.historyLog || [];
+                bills = cloudData.bills || []; historyLog = cloudData.historyLog || [];
                 document.getElementById('startBalance').value = cloudData.balance || '';
                 document.getElementById('payAmount').value = cloudData.pay || '';
                 document.getElementById('nextPayDate').value = cloudData.payDate || '';
