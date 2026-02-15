@@ -63,6 +63,8 @@
         .splash-sub { font-size: 0.9em; opacity: 0.85; margin-top: 8px; }
         #cloudLoginModal { z-index: 20000; }
         body.app-locked { overflow: hidden; }
+        .profile-box { width: 44px; height: 44px; padding: 0; border-radius: 12px; display: inline-flex; align-items: center; justify-content: center; font-size: 1.1rem; }
+        .profile-avatar { width: 36px; height: 36px; border-radius: 10px; object-fit: cover; display: block; }
     </style>
 </head>
 <body class="app-locked">
@@ -73,7 +75,7 @@
 
     <div id="dashboard" class="page active">
         <div class="sync-bar">
-            <button id="auth_btn" class="btn btn-sync" onclick="handleAuthClick()">Cloud Login</button>
+            <button id="auth_btn" class="btn btn-sync" onclick="handleAuthClick()" aria-label="Cloud login" title="Cloud Login">Cloud Login</button>
             <button id="logout_btn" class="btn btn-sync" onclick="logoutAndReset()" style="display:none; background:#e67e22;">Log Out</button>
         </div>
 
@@ -167,7 +169,7 @@
 
 <script>
 const CLIENT_ID = '209415722638-h0br52hmiektc9tbm9fqcfkb6uhuisaa.apps.googleusercontent.com';
-const SCOPES = 'https://www.googleapis.com/auth/drive.file';
+const SCOPES = 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.profile';
 const STORAGE_KEYS = {
     bills: 'BudgetBud_bills', history: 'BudgetBud_history', startBal: 'BudgetBud_startBal',
     payAmt: 'BudgetBud_payAmt', payDate: 'BudgetBud_payDate', payFreq: 'BudgetBud_payFreq',
@@ -181,6 +183,7 @@ let bills = [];
 let historyLog = [];
 let gsiScriptRequested = false;
 let authInitTimer = null;
+let userProfilePhoto = '';
 
 function loadGoogleIdentityScript() {
     if (window.google?.accounts?.oauth2) return;
@@ -217,9 +220,48 @@ function closeCloudLoginPrompt() {
     document.getElementById('appShell').style.display = 'block';
 }
 
+function renderAuthButton() {
+    const authBtn = document.getElementById('auth_btn');
+    if (!authBtn) return;
+
+    if (accessToken) {
+        authBtn.classList.add('profile-box');
+        authBtn.disabled = true;
+        authBtn.style.cursor = 'default';
+        authBtn.title = 'Connected Google profile';
+        authBtn.setAttribute('aria-label', 'Connected Google profile');
+        authBtn.innerHTML = userProfilePhoto
+            ? `<img src="${userProfilePhoto}" alt="Google profile" class="profile-avatar">`
+            : '👤';
+        return;
+    }
+
+    authBtn.classList.remove('profile-box');
+    authBtn.disabled = false;
+    authBtn.style.cursor = 'pointer';
+    authBtn.title = 'Cloud Login';
+    authBtn.setAttribute('aria-label', 'Cloud login');
+    authBtn.textContent = 'Cloud Login';
+}
+
 function updateAuthUi(isLoggedIn) {
-    document.getElementById('auth_btn').innerText = isLoggedIn ? 'Logged In' : 'Cloud Login';
+    if (!isLoggedIn) userProfilePhoto = '';
+    renderAuthButton();
     document.getElementById('logout_btn').style.display = isLoggedIn ? 'block' : 'none';
+}
+
+async function loadGoogleProfilePhoto() {
+    if (!accessToken) return;
+    try {
+        const profile = await fetchJson('https://www.googleapis.com/oauth2/v3/userinfo', {
+            headers: { Authorization: `Bearer ${accessToken}` }
+        });
+        userProfilePhoto = typeof profile.picture === 'string' ? profile.picture : '';
+    } catch (e) {
+        console.error(e);
+        userProfilePhoto = '';
+    }
+    renderAuthButton();
 }
 
 
@@ -267,6 +309,7 @@ function initGoogleAuth() {
 
                 accessToken = resp.access_token;
                 updateAuthUi(true);
+                void loadGoogleProfilePhoto();
                 closeCloudLoginPrompt();
                 setStatus('Cloud Connected', 'success');
                 pullFromDrive();
@@ -810,6 +853,7 @@ async function logoutAndReset() {
     const finishLogout = () => {
         accessToken = null;
         tokenClient = null;
+        userProfilePhoto = '';
         location.reload();
     };
 
