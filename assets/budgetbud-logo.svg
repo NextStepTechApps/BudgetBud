@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 260" role="img" aria-labelledby="title desc">
+  <title id="title">BudgetBud logo</title>
+  <desc id="desc">BudgetBud wordmark with green gradient and a small leaf icon.</desc>
+  <defs>
+    <linearGradient id="wordGrad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#0f5132"/>
+      <stop offset="55%" stop-color="#0d6b45"/>
+      <stop offset="100%" stop-color="#98e7b3"/>
+    </linearGradient>
+    <linearGradient id="leafGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#8de5a9"/>
+      <stop offset="100%" stop-color="#2ecc71"/>
+    </linearGradient>
+  </defs>
+
+  <text x="12" y="185" fill="url(#wordGrad)" font-size="172" font-family="Inter, Segoe UI, Arial, sans-serif" font-weight="800" letter-spacing="-2">
+    BudgetBud
+  </text>
+
+  <g transform="translate(720,18)">
+    <path d="M74 112c-6-45 22-84 73-97 15 51-7 102-47 125-18 10-21 10-26-28z" fill="url(#leafGrad)" stroke="#0d6b45" stroke-width="8"/>
+    <path d="M98 132c-10-25 4-53 29-72" fill="none" stroke="#0d6b45" stroke-width="8" stroke-linecap="round"/>
+    <text x="86" y="72" fill="#d9ffe8" font-size="44" font-family="Inter, Segoe UI, Arial, sans-serif" font-weight="700">$</text>
+  </g>
+</svg>
