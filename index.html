@@ -28,6 +28,8 @@
         .container { max-width: 500px; margin: auto; position: relative; }
         .card { background: var(--card-bg); padding: 20px; border-radius: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); margin-bottom: 20px; }
         h1 { color: var(--primary); text-align: center; margin-bottom: 5px; }
+        .brand-logo { display:block; margin: 8px auto 10px; width: min(92vw, 420px); height: auto; }
+        .brand-logo-splash { display:block; margin: 0 auto 8px; width: min(72vw, 320px); height: auto; }
         .sync-bar { display: flex; gap: 10px; margin-bottom: 20px; }
         .btn { border: none; border-radius: 10px; padding: 12px; font-weight: bold; cursor: pointer; color: white; width: 100%; font-size: 14px; }
         .btn-sync { background: var(--google-blue); }
@@ -70,7 +72,7 @@
 <body class="app-locked">
 <div class="container" id="appShell" style="display:none;">
     <button class="theme-toggle" onclick="toggleTheme()" id="themeBtn">🌙</button>
-    <h1>BudgetBud</h1>
+    <img src="assets/budgetbud-logo.svg" alt="BudgetBud" class="brand-logo">
     <div id="status">Status: Waiting for Google...</div>
 
     <div id="dashboard" class="page active">
@@ -123,7 +125,7 @@
 
     <div id="weekly" class="page">
         <div class="card">
-            <h3>Weekly Breakdown</h3>
+            <h3>Upcoming 90-Day Breakdown</h3>
             <div id="weeklyResults" class="scroll-area"></div>
         </div>
     </div>
@@ -160,8 +162,9 @@
 
 <div id="cloudLoginModal" class="modal-overlay splash-lock" style="display:flex;">
     <div class="modal">
+        <img src="assets/budgetbud-logo.svg" alt="BudgetBud" class="brand-logo-splash">
         <h2>🔒 Login Required</h2>
-        <p id="cloudLoginText">Sign in with Google Drive to continue to BudgetBud.</p>
+        <p id="cloudLoginText">Sign in with Google Drive to continue.</p>
         <button id="cloudLoginBtn" onclick="handleAuthClick()" class="btn btn-sync" disabled>Loading Google...</button>
         <p class="splash-sub" id="cloudLoginHint">The app unlocks after successful Google login.</p>
     </div>
@@ -185,7 +188,61 @@ let gsiScriptRequested = false;
 let authInitTimer = null;
 let userProfilePhoto = '';
 
+function isSecureOriginForGoogleAuth() {
+    if (window.isSecureContext) return true;
+    const host = window.location.hostname;
+    return host === 'localhost'
+        || host.endsWith('.localhost')
+        || host === '127.0.0.1'
+        || host === '::1'
+        || host === '[::1]';
+}
+
+function getHttpsUrl() {
+    if (window.location.protocol === 'https:') return window.location.href;
+    return `https://${window.location.host}${window.location.pathname}${window.location.search}${window.location.hash}`;
+}
+
+function promptForHttpsAuth() {
+    const httpsUrl = getHttpsUrl();
+    const hint = document.getElementById('cloudLoginHint');
+    if (hint) {
+        hint.innerHTML = `Google login requires HTTPS. <a href="${httpsUrl}">Switch to HTTPS</a>.`;
+    }
+    setCloudLoginButtonState(false, 'HTTPS Required');
+    setStatus('Google auth requires HTTPS. Open the HTTPS version to continue.', 'error');
+}
+
+function showGoogleOAuthConfigHelp(errorCode = '') {
+    const hint = document.getElementById('cloudLoginHint');
+    const origin = window.location.origin;
+    const maybeDetail = errorCode ? ` (${errorCode})` : '';
+    if (hint) {
+        hint.innerHTML = `Google sign-in is blocked${maybeDetail}. If you recently migrated domains, add <b>${origin}</b> to your OAuth client's Authorized JavaScript origins in Google Cloud Console, then retry.`;
+    }
+    setCloudLoginButtonState(true, 'Retry Google Login');
+    setStatus('Google OAuth client mismatch for current domain. Update Authorized JavaScript origins.', 'error');
+}
+
+function checkOAuthErrorInLocation() {
+    const search = new URLSearchParams(window.location.search);
+    const hash = new URLSearchParams(window.location.hash.startsWith('#') ? window.location.hash.slice(1) : window.location.hash);
+    const error = search.get('error') || hash.get('error') || '';
+
+    if (!error) return false;
+    if (error === 'redirect_uri_mismatch' || error === 'invalid_request') {
+        showGoogleOAuthConfigHelp(error);
+        return true;
+    }
+    return false;
+}
+
 function loadGoogleIdentityScript() {
+    if (!isSecureOriginForGoogleAuth()) {
+        promptForHttpsAuth();
+        return;
+    }
+
     if (window.google?.accounts?.oauth2) return;
     if (gsiScriptRequested) return;
 
@@ -282,6 +339,11 @@ function scheduleAuthInitRetry() {
 }
 
 function initGoogleAuth() {
+    if (!isSecureOriginForGoogleAuth()) {
+        promptForHttpsAuth();
+        return;
+    }
+
     if (tokenClient) {
         setCloudLoginButtonState(true);
         return;
@@ -301,6 +363,10 @@ function initGoogleAuth() {
             scope: SCOPES,
             callback: (resp) => {
                 if (!resp || resp.error || !resp.access_token) {
+                    if (resp?.error === 'redirect_uri_mismatch' || resp?.error === 'invalid_request') {
+                        showGoogleOAuthConfigHelp(resp.error);
+                        return;
+                    }
                     setStatus('Login failed. Please try again.', 'error');
                     document.getElementById('cloudLoginHint').innerText = 'Login was cancelled or failed. Try again.';
                     setCloudLoginButtonState(true, 'Retry Google Login');
@@ -451,7 +517,11 @@ function renderBills() {
         tag.innerText = b.type;
 
         const line = document.createElement('span');
-        line.innerText = `${b.name} ($${b.amount})`;
+        const dueDate = new Date(b.nextDate);
+        const dueText = Number.isNaN(dueDate.getTime())
+            ? b.nextDate
+            : dueDate.toLocaleDateString('en-AU', { day: '2-digit', month: 'short', year: 'numeric' });
+        line.innerText = `${b.name} ($${b.amount}) • Due ${dueText}`;
         line.style.fontWeight = '600';
 
         const actions = document.createElement('div');
@@ -657,59 +727,63 @@ function calculateForecast() {
     let curr = new Date();
     const temp = bills.map((b) => ({ ...b, nextDate: new Date(b.nextDate) }));
 
-    for (let w = 0; w < 12; w++) {
-        const block = document.createElement('div');
-        block.className = 'week-block';
+    let block = null;
+    for (let day = 0; day < 90; day++) {
+        if (day % 7 === 0) {
+            block = document.createElement('div');
+            block.className = 'week-block';
 
-        const title = document.createElement('div');
-        title.className = 'week-title';
-        title.innerText = `Week ${w + 1}`;
-        block.appendChild(title);
-
-        for (let d = 0; d < 7; d++) {
-            let noteParts = [];
-            const diff = Math.floor((curr - pDate) / (1000 * 60 * 60 * 24));
-            if (diff >= 0 && diff % payFreq === 0) {
-                bal += pay;
-                noteParts.push('+[Pay]');
-            }
-
-            temp.forEach((b) => {
-                if (curr.toDateString() === b.nextDate.toDateString()) {
-                    bal -= b.amount;
-                    noteParts.push(`[${b.name}]`);
-                    if (b.freq > 0) b.nextDate.setDate(b.nextDate.getDate() + b.freq);
-                    else b.nextDate.setDate(b.nextDate.getDate() + 999);
-                }
-            });
-
-            if (noteParts.length) {
-                const row = document.createElement('div');
-                row.className = 'forecast-row';
-
-                const dateEl = document.createElement('span');
-                dateEl.innerText = curr.toLocaleDateString('en-AU', { day: '2-digit', month: 'short' });
-
-                const noteEl = document.createElement('small');
-                noteEl.innerText = noteParts.join(' ');
-
-                const balEl = document.createElement('span');
-                balEl.innerText = `$${bal.toFixed(0)}`;
-
-                row.append(dateEl, noteEl, balEl);
-                block.appendChild(row);
-            }
-
-            curr.setDate(curr.getDate() + 1);
+            const title = document.createElement('div');
+            title.className = 'week-title';
+            title.innerText = `Week ${Math.floor(day / 7) + 1}`;
+            block.appendChild(title);
+            res.appendChild(block);
         }
 
-        const footer = document.createElement('div');
-        footer.style.textAlign = 'right';
-        footer.style.fontSize = '0.8em';
-        footer.style.padding = '5px';
-        footer.innerText = `End: $${bal.toFixed(0)}`;
-        block.appendChild(footer);
-        res.appendChild(block);
+        let noteParts = [];
+        const diff = Math.floor((curr - pDate) / (1000 * 60 * 60 * 24));
+        if (diff >= 0 && diff % payFreq === 0) {
+            bal += pay;
+            noteParts.push('+[Pay]');
+        }
+
+        temp.forEach((b) => {
+            if (curr.toDateString() === b.nextDate.toDateString()) {
+                bal -= b.amount;
+                noteParts.push(`[${b.name}]`);
+                if (b.freq > 0) b.nextDate.setDate(b.nextDate.getDate() + b.freq);
+                else b.nextDate.setDate(b.nextDate.getDate() + 999);
+            }
+        });
+
+        if (noteParts.length && block) {
+            const row = document.createElement('div');
+            row.className = 'forecast-row';
+
+            const dateEl = document.createElement('span');
+            dateEl.innerText = curr.toLocaleDateString('en-AU', { day: '2-digit', month: 'short' });
+
+            const noteEl = document.createElement('small');
+            noteEl.innerText = noteParts.join(' ');
+
+            const balEl = document.createElement('span');
+            balEl.innerText = `$${bal.toFixed(0)}`;
+
+            row.append(dateEl, noteEl, balEl);
+            block.appendChild(row);
+        }
+
+        const isEndOfWeekOrWindow = (day + 1) % 7 === 0 || day === 89;
+        if (isEndOfWeekOrWindow && block) {
+            const footer = document.createElement('div');
+            footer.style.textAlign = 'right';
+            footer.style.fontSize = '0.8em';
+            footer.style.padding = '5px';
+            footer.innerText = `End: $${bal.toFixed(0)}`;
+            block.appendChild(footer);
+        }
+
+        curr.setDate(curr.getDate() + 1);
     }
 }
 
@@ -926,8 +1000,11 @@ window.onload = () => {
 
     showCloudLoginPrompt();
     setCloudLoginButtonState(false);
-    loadGoogleIdentityScript();
-    initGoogleAuth();
+    const hasOAuthConfigError = checkOAuthErrorInLocation();
+    if (!hasOAuthConfigError) {
+        loadGoogleIdentityScript();
+        initGoogleAuth();
+    }
 
     loadLocal();
     toggleFreq();
